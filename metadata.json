@@ -1,0 +1,6 @@
+{
+  "name": "Anime XML Studio",
+  "description": "2D anime XML animation interpreter, real-time preview player, and MP4 video exporter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
