@@ -63,7 +63,7 @@ fun XmlEditorScreen(
                 title = currentProject?.title ?: "XML Editor",
                 subtitle = "Anime XML Format v1.0",
                 navigationIcon = Icons.Default.ArrowBack,
-                onNavigationClick = { viewModel.navigateTo(StudioScreen.PREVIEW) },
+                onNavigationClick = { viewModel.popBack() },
                 actions = {
                     IconButton(
                         onClick = { viewModel.undo() },
@@ -145,19 +145,41 @@ fun XmlEditorScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { viewModel.validateXml() },
+                            onClick = {
+                                val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clip.primaryClip?.getItemAt(0)?.text?.let { text ->
+                                    val pasted = text.toString().trim()
+                                    if (pasted.isNotBlank()) {
+                                        viewModel.updateXmlCode(pasted)
+                                        viewModel.generatePreview()
+                                    }
+                                }
+                            },
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple),
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(1.1f)
+                                .testTag("paste_and_preview_button")
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, tint = NeonPurple, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("PASTE & RUN", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.validateXml() },
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderDark),
+                            modifier = Modifier
+                                .weight(0.9f)
                                 .testTag("validate_xml_button")
                         ) {
-                            Icon(Icons.Default.Rule, contentDescription = null, tint = NeonPurple, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("VALIDATE", color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Rule, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("VALIDATE", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
 
                         Button(
@@ -168,9 +190,9 @@ fun XmlEditorScreen(
                                 .weight(1f)
                                 .testTag("generate_preview_button")
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("PREVIEW", fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("PREVIEW", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -324,27 +346,29 @@ fun XmlEditorScreen(
                     .background(Obsidian)
                     .verticalScroll(verticalScroll)
             ) {
-                // Line numbers column
-                Column(
+                // Fast, single-text rendering for line numbers (zero lag on long XML)
+                val lineNumbersText = remember(lineCount) {
+                    (1..lineCount).joinToString("\n")
+                }
+
+                Box(
                     modifier = Modifier
                         .background(StudioBlack)
                         .padding(horizontal = 8.dp, vertical = 12.dp)
                         .widthIn(min = 36.dp),
-                    horizontalAlignment = Alignment.End
+                    contentAlignment = Alignment.TopEnd
                 ) {
-                    for (i in 1..lineCount) {
-                        val isErr = (i == errorLine)
-                        Text(
-                            text = "$i",
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                color = if (isErr) CrimsonAlert else LineNumberColor,
-                                fontWeight = if (isErr) FontWeight.Bold else FontWeight.Normal,
-                                lineHeight = 20.sp
-                            )
+                    Text(
+                        text = lineNumbersText,
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = LineNumberColor,
+                            fontWeight = FontWeight.Normal,
+                            lineHeight = 20.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End
                         )
-                    }
+                    )
                 }
 
                 // Vertical separator

@@ -54,7 +54,7 @@ fun TimelineScreen(
                 title = "Visual Timeline",
                 subtitle = "${currentProject?.title ?: "Project"} • ${formatTimecode(currentTime)}",
                 navigationIcon = Icons.Default.ArrowBack,
-                onNavigationClick = { viewModel.navigateTo(StudioScreen.PREVIEW) },
+                onNavigationClick = { viewModel.popBack() },
                 actions = {
                     IconButton(
                         onClick = { viewModel.togglePlay() },

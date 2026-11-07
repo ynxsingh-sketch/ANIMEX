@@ -153,7 +153,7 @@ fun AssetManagerScreen(
                 title = "Asset Manager",
                 subtitle = "${allAssets.size} Assets Available",
                 navigationIcon = Icons.Default.ArrowBack,
-                onNavigationClick = { viewModel.navigateTo(StudioScreen.HOME) },
+                onNavigationClick = { viewModel.popBack() },
                 actions = {
                     IconButton(onClick = { viewModel.navigateTo(StudioScreen.EDITOR) }) {
                         Icon(Icons.Default.Code, contentDescription = "Editor", tint = TextPrimary)

@@ -80,20 +80,48 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val undoStack = mutableListOf<String>()
     private val redoStack = mutableListOf<String>()
 
+    // Navigation back stack for step-by-step back traversal
+    private val navBackStack = mutableListOf<StudioScreen>()
+
     init {
         viewModelScope.launch {
             repository.seedSampleProjectsIfEmpty()
         }
     }
 
-    fun navigateTo(screen: StudioScreen) {
+    fun navigateTo(screen: StudioScreen, addToStack: Boolean = true) {
         if (screen != StudioScreen.PREVIEW && _isPlaying.value) {
             pause()
+        }
+        if (addToStack && _currentScreen.value != screen) {
+            navBackStack.add(_currentScreen.value)
         }
         _currentScreen.value = screen
     }
 
+    fun popBack(): Boolean {
+        if (_isPlaying.value) {
+            pause()
+        }
+        if (navBackStack.isNotEmpty()) {
+            val previous = navBackStack.removeAt(navBackStack.size - 1)
+            _currentScreen.value = previous
+            return true
+        } else if (_currentScreen.value != StudioScreen.HOME) {
+            _currentScreen.value = StudioScreen.HOME
+            return true
+        }
+        return false
+    }
+
+    fun canGoBack(): Boolean {
+        return navBackStack.isNotEmpty() || _currentScreen.value != StudioScreen.HOME
+    }
+
     fun openProject(project: AnimeProject) {
+        if (_currentScreen.value != StudioScreen.PREVIEW) {
+            navBackStack.add(_currentScreen.value)
+        }
         _currentProject.value = project
         _xmlCode.value = project.xmlContent
         undoStack.clear()
@@ -101,13 +129,60 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         undoStack.add(project.xmlContent)
 
         validateXml()
-        val doc = _validationResult.value?.doc
+        val doc = _validationResult.value?.doc ?: try { parser.parse(project.xmlContent) } catch (_: Exception) { null }
         if (doc != null) {
             _parsedDoc.value = doc
             audioEngine.prepareAssets(doc, repository.getProjectDir(project.id))
         }
         _currentTime.value = 0f
         _currentScreen.value = StudioScreen.PREVIEW
+    }
+
+    fun importAndPreviewXml(rawXml: String, title: String = "Imported Anime Project") {
+        val cleanXml = rawXml.trim()
+        if (cleanXml.isBlank()) {
+            _statusMessage.value = "Pasted XML is empty."
+            return
+        }
+
+        viewModelScope.launch {
+            val parsedDoc = try {
+                parser.parse(cleanXml)
+            } catch (e: Exception) {
+                null
+            }
+
+            val newProj = AnimeProject(
+                title = title.ifBlank { "Custom Animation" },
+                description = "Rendered from custom XML",
+                width = parsedDoc?.settings?.width ?: 1920,
+                height = parsedDoc?.settings?.height ?: 1080,
+                fps = parsedDoc?.settings?.fps ?: 30,
+                duration = parsedDoc?.totalDuration ?: 10f,
+                xmlContent = cleanXml
+            )
+
+            val id = repository.saveProject(newProj)
+            val saved = repository.getProjectById(id) ?: newProj.copy(id = id)
+            
+            _currentProject.value = saved
+            _xmlCode.value = cleanXml
+            undoStack.clear()
+            redoStack.clear()
+            undoStack.add(cleanXml)
+
+            validateXml()
+            val doc = _validationResult.value?.doc ?: parsedDoc
+            if (doc != null) {
+                _parsedDoc.value = doc
+                audioEngine.prepareAssets(doc, repository.getProjectDir(saved.id))
+            }
+            _currentTime.value = 0f
+            navBackStack.add(_currentScreen.value)
+            _currentScreen.value = StudioScreen.PREVIEW
+            play()
+            _statusMessage.value = "Custom XML loaded and playing!"
+        }
     }
 
     fun createNewProject(title: String, sampleIndex: Int = 0) {
@@ -159,11 +234,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun validateXml(): Boolean {
         val result = validator.validate(_xmlCode.value)
         _validationResult.value = result
-        if (result.isValid && result.doc != null) {
-            _parsedDoc.value = result.doc
+        val doc = result.doc ?: try { parser.parse(_xmlCode.value) } catch (_: Exception) { null }
+        if (doc != null) {
+            _parsedDoc.value = doc
             val current = _currentProject.value
             if (current != null) {
-                audioEngine.prepareAssets(result.doc, repository.getProjectDir(current.id))
+                audioEngine.prepareAssets(doc, repository.getProjectDir(current.id))
             }
             return true
         }
@@ -171,15 +247,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun generatePreview() {
-        val isValid = validateXml()
-        if (isValid) {
+        validateXml()
+        val doc = _parsedDoc.value ?: try { parser.parse(_xmlCode.value) } catch (e: Exception) { null }
+        if (doc != null) {
+            _parsedDoc.value = doc
             _currentTime.value = 0f
             saveCurrentProject()
             navigateTo(StudioScreen.PREVIEW)
             play()
-            _statusMessage.value = "Preview generated successfully!"
+            _statusMessage.value = "Preview generated (${doc.scenes.size} scene(s))!"
         } else {
-            _statusMessage.value = "XML validation issues found. Please check errors."
+            _statusMessage.value = "Could not parse XML. Please check the XML format."
         }
     }
 

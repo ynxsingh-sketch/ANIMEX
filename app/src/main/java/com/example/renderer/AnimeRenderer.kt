@@ -17,6 +17,26 @@ class AnimeRenderer(private val context: Context) {
     private val matrix = Matrix()
     private val rectF = RectF()
 
+    // Pre-allocated reusable geometry objects to eliminate GC pauses during playback & video export
+    private val colorCache = HashMap<String, Int>()
+    private val sharedSrcRect = Rect()
+    private val sharedDestRect = RectF()
+    private val sharedWrapRect = RectF()
+    private val sharedDialogueRect = RectF()
+    private val sharedPillRect = RectF()
+    private val emotePath = Path()
+
+    private fun getCachedColor(colorStr: String?, defaultColor: Int): Int {
+        if (colorStr.isNullOrBlank()) return defaultColor
+        return colorCache.getOrPut(colorStr) {
+            try {
+                Color.parseColor(colorStr)
+            } catch (_: Exception) {
+                defaultColor
+            }
+        }
+    }
+
     fun render(
         canvas: Canvas,
         doc: AnimeDoc,
@@ -71,7 +91,7 @@ class AnimeRenderer(private val context: Context) {
         if (bgRefs.isEmpty()) {
             // Default dark anime studio backdrop
             paint.shader = null
-            paint.color = Color.parseColor("#090D14")
+            paint.color = getCachedColor("#090D14", Color.BLACK)
             canvas.drawRect(0f, 0f, docW, docH, paint)
         } else {
             for (layer in bgRefs) {
@@ -80,16 +100,16 @@ class AnimeRenderer(private val context: Context) {
                 val bitmap = assetResolver.loadBitmap(src, projectDir)
 
                 val parallaxOffset = (sceneTime * layer.speed * 30f) % docW
-                val bgRect = Rect(0, 0, bitmap.width, bitmap.height)
-                val destRect = RectF(-parallaxOffset, 0f, docW - parallaxOffset + 5f, docH)
+                sharedSrcRect.set(0, 0, bitmap.width, bitmap.height)
+                sharedDestRect.set(-parallaxOffset, 0f, docW - parallaxOffset + 5f, docH)
 
                 paint.alpha = (layer.opacity.coerceIn(0f, 1f) * 255).toInt()
-                canvas.drawBitmap(bitmap, bgRect, destRect, paint)
+                canvas.drawBitmap(bitmap, sharedSrcRect, sharedDestRect, paint)
 
                 // If scrolling parallax, wrap around
                 if (parallaxOffset > 0) {
-                    val wrapRect = RectF(docW - parallaxOffset, 0f, 2 * docW - parallaxOffset, docH)
-                    canvas.drawBitmap(bitmap, bgRect, wrapRect, paint)
+                    sharedWrapRect.set(docW - parallaxOffset, 0f, 2 * docW - parallaxOffset, docH)
+                    canvas.drawBitmap(bitmap, sharedSrcRect, sharedWrapRect, paint)
                 }
             }
         }
@@ -230,8 +250,8 @@ class AnimeRenderer(private val context: Context) {
         rectF.set(-w / 2f, -h / 2f, w / 2f, h / 2f)
 
         paint.alpha = (opacity.coerceIn(0f, 1f) * 255).toInt()
-        val srcRect = Rect(0, 0, bitmap.width, bitmap.height)
-        canvas.drawBitmap(bitmap, srcRect, rectF, paint)
+        sharedSrcRect.set(0, 0, bitmap.width, bitmap.height)
+        canvas.drawBitmap(bitmap, sharedSrcRect, rectF, paint)
 
         // Draw Expression Emote Indicator
         if (expressionName != null) {
@@ -250,7 +270,7 @@ class AnimeRenderer(private val context: Context) {
         when (expr.lowercase()) {
             "angry" -> {
                 // 💢 Anger vein symbol
-                paint.color = Color.parseColor("#EF4444")
+                paint.color = getCachedColor("#EF4444", Color.RED)
                 val s = 24f * pulse
                 canvas.drawRect(emoteX - s, emoteY - 4f, emoteX + s, emoteY + 4f, paint)
                 canvas.drawRect(emoteX - 4f, emoteY - s, emoteX + 4f, emoteY + s, paint)
@@ -259,37 +279,35 @@ class AnimeRenderer(private val context: Context) {
             }
             "happy", "smile" -> {
                 // ✨ Sparkle / star flare
-                paint.color = Color.parseColor("#FBBF24")
+                paint.color = getCachedColor("#FBBF24", Color.YELLOW)
                 val r = 16f * pulse
                 canvas.drawCircle(emoteX, emoteY, r * 0.6f, paint)
-                val path = Path().apply {
-                    moveTo(emoteX, emoteY - r * 1.5f)
-                    lineTo(emoteX + r * 0.4f, emoteY)
-                    lineTo(emoteX + r * 1.5f, emoteY)
-                    lineTo(emoteX + r * 0.4f, emoteY + r * 0.4f)
-                    lineTo(emoteX, emoteY + r * 1.5f)
-                    lineTo(emoteX - r * 0.4f, emoteY + r * 0.4f)
-                    lineTo(emoteX - r * 1.5f, emoteY)
-                    lineTo(emoteX - r * 0.4f, emoteY)
-                    close()
-                }
-                canvas.drawPath(path, paint)
+                emotePath.reset()
+                emotePath.moveTo(emoteX, emoteY - r * 1.5f)
+                emotePath.lineTo(emoteX + r * 0.4f, emoteY)
+                emotePath.lineTo(emoteX + r * 1.5f, emoteY)
+                emotePath.lineTo(emoteX + r * 0.4f, emoteY + r * 0.4f)
+                emotePath.lineTo(emoteX, emoteY + r * 1.5f)
+                emotePath.lineTo(emoteX - r * 0.4f, emoteY + r * 0.4f)
+                emotePath.lineTo(emoteX - r * 1.5f, emoteY)
+                emotePath.lineTo(emoteX - r * 0.4f, emoteY)
+                emotePath.close()
+                canvas.drawPath(emotePath, paint)
             }
             "shocked" -> {
                 // 💦 Blue sweatdrop
-                paint.color = Color.parseColor("#38BDF8")
+                paint.color = getCachedColor("#38BDF8", Color.CYAN)
                 val r = 18f * pulse
-                val dropPath = Path().apply {
-                    moveTo(emoteX, emoteY - r * 1.2f)
-                    quadTo(emoteX + r, emoteY, emoteX, emoteY + r)
-                    quadTo(emoteX - r, emoteY, emoteX, emoteY - r * 1.2f)
-                    close()
-                }
-                canvas.drawPath(dropPath, paint)
+                emotePath.reset()
+                emotePath.moveTo(emoteX, emoteY - r * 1.2f)
+                emotePath.quadTo(emoteX + r, emoteY, emoteX, emoteY + r)
+                emotePath.quadTo(emoteX - r, emoteY, emoteX, emoteY - r * 1.2f)
+                emotePath.close()
+                canvas.drawPath(emotePath, paint)
             }
             "serious" -> {
                 // Glowing cyan eye flare streak
-                paint.color = Color.parseColor("#00E5FF")
+                paint.color = getCachedColor("#00E5FF", Color.CYAN)
                 paint.strokeWidth = 5f
                 paint.style = Paint.Style.STROKE
                 val flareLen = 40f * pulse
@@ -311,7 +329,7 @@ class AnimeRenderer(private val context: Context) {
         paint.shader = null
         when (effect.type.lowercase()) {
             "rain" -> {
-                paint.color = Color.parseColor(effect.color ?: "#B0E0E6")
+                paint.color = getCachedColor(effect.color, Color.parseColor("#B0E0E6"))
                 paint.strokeWidth = 3f * effect.intensity
                 paint.style = Paint.Style.STROKE
                 val numDrops = (120 * effect.intensity).toInt()
@@ -324,7 +342,7 @@ class AnimeRenderer(private val context: Context) {
                 }
             }
             "snow" -> {
-                paint.color = Color.parseColor(effect.color ?: "#FFFFFF")
+                paint.color = getCachedColor(effect.color, Color.WHITE)
                 paint.style = Paint.Style.FILL
                 val numFlakes = (100 * effect.intensity).toInt()
                 for (i in 0 until numFlakes) {
@@ -342,7 +360,7 @@ class AnimeRenderer(private val context: Context) {
             "particles" -> {
                 // Rising golden / cyan anime embers
                 paint.style = Paint.Style.FILL
-                val baseColor = Color.parseColor(effect.color ?: "#00E5FF")
+                val baseColor = getCachedColor(effect.color, Color.parseColor("#00E5FF"))
                 paint.color = baseColor
                 val count = (80 * effect.intensity).toInt()
                 for (i in 0 until count) {
@@ -359,21 +377,21 @@ class AnimeRenderer(private val context: Context) {
             "flash" -> {
                 val flashAlpha = ((1f - progress) * 255 * effect.intensity).toInt().coerceIn(0, 255)
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor(effect.color ?: "#FFFFFF")
+                paint.color = getCachedColor(effect.color, Color.WHITE)
                 paint.alpha = flashAlpha
                 canvas.drawRect(0f, 0f, docW, docH, paint)
             }
             "fade_in" -> {
                 val fadeAlpha = ((1f - progress) * 255 * effect.intensity).toInt().coerceIn(0, 255)
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor(effect.color ?: "#000000")
+                paint.color = getCachedColor(effect.color, Color.BLACK)
                 paint.alpha = fadeAlpha
                 canvas.drawRect(0f, 0f, docW, docH, paint)
             }
             "fade_out" -> {
                 val fadeAlpha = (progress * 255 * effect.intensity).toInt().coerceIn(0, 255)
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor(effect.color ?: "#000000")
+                paint.color = getCachedColor(effect.color, Color.BLACK)
                 paint.alpha = fadeAlpha
                 canvas.drawRect(0f, 0f, docW, docH, paint)
             }
@@ -409,38 +427,38 @@ class AnimeRenderer(private val context: Context) {
         val boxX = (docW - boxW) / 2f
         val boxY = if (dialogue.position.equals("top", ignoreCase = true)) 60f else docH - boxH - 60f
 
-        val boxRect = RectF(boxX, boxY, boxX + boxW, boxY + boxH)
+        sharedDialogueRect.set(boxX, boxY, boxX + boxW, boxY + boxH)
 
         // Semi-transparent glassmorphic anime dialogue card
         paint.shader = null
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(225, 13, 17, 26) // Deep studio dark with 88% opacity
-        canvas.drawRoundRect(boxRect, 20f, 20f, paint)
+        canvas.drawRoundRect(sharedDialogueRect, 20f, 20f, paint)
 
         // Neon border
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 3f
-        paint.color = Color.parseColor("#38BDF8")
-        canvas.drawRoundRect(boxRect, 20f, 20f, paint)
+        paint.color = getCachedColor("#38BDF8", Color.CYAN)
+        canvas.drawRoundRect(sharedDialogueRect, 20f, 20f, paint)
 
         // Character Name Tag Pill
         if (dialogue.character.isNotBlank()) {
             val pillW = 200f
             val pillH = 36f
-            val pillRect = RectF(boxX + 24f, boxY - 18f, boxX + 24f + pillW, boxY + 18f)
+            sharedPillRect.set(boxX + 24f, boxY - 18f, boxX + 24f + pillW, boxY + 18f)
             paint.style = Paint.Style.FILL
-            paint.color = Color.parseColor("#0284C7")
-            canvas.drawRoundRect(pillRect, 18f, 18f, paint)
+            paint.color = getCachedColor("#0284C7", Color.BLUE)
+            canvas.drawRoundRect(sharedPillRect, 18f, 18f, paint)
 
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 2f
             paint.color = Color.WHITE
-            canvas.drawRoundRect(pillRect, 18f, 18f, paint)
+            canvas.drawRoundRect(sharedPillRect, 18f, 18f, paint)
 
             textPaint.color = Color.WHITE
             textPaint.textSize = 22f
             textPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(dialogue.character.uppercase(), pillRect.centerX(), pillRect.centerY() + 8f, textPaint)
+            canvas.drawText(dialogue.character.uppercase(), sharedPillRect.centerX(), sharedPillRect.centerY() + 8f, textPaint)
         }
 
         // Dialogue Subtitle Text
@@ -455,10 +473,11 @@ class AnimeRenderer(private val context: Context) {
         if (charCount < dialogue.text.length && ((time * 4).toInt() % 2 == 0)) {
             val textWidth = textPaint.measureText(visibleText)
             paint.style = Paint.Style.FILL
-            paint.color = Color.parseColor("#38BDF8")
+            paint.color = getCachedColor("#38BDF8", Color.CYAN)
             canvas.drawRect(boxX + 38f + textWidth, boxY + 48f, boxX + 44f + textWidth, boxY + 80f, paint)
         }
     }
+
 
     private data class CameraEval(
         val zoom: Float = 1.0f,

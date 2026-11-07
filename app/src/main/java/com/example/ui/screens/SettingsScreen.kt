@@ -34,7 +34,7 @@ fun SettingsScreen(
                 title = "Settings & XML Spec",
                 subtitle = "Standard Anime XML Format v1.0",
                 navigationIcon = Icons.Default.ArrowBack,
-                onNavigationClick = { viewModel.navigateTo(StudioScreen.HOME) }
+                onNavigationClick = { viewModel.popBack() }
             )
         }
     ) { paddingValues ->

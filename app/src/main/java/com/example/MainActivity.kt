@@ -52,19 +52,9 @@ fun AnimeStudioApp(
         }
     }
 
-    // Back handling according to Guidelines
-    BackHandler(enabled = currentScreen != StudioScreen.HOME) {
-        when (currentScreen) {
-            StudioScreen.EDITOR, StudioScreen.TIMELINE -> {
-                viewModel.navigateTo(StudioScreen.PREVIEW)
-            }
-            StudioScreen.PREVIEW, StudioScreen.ASSETS, StudioScreen.SETTINGS -> {
-                viewModel.navigateTo(StudioScreen.HOME)
-            }
-            StudioScreen.HOME -> {
-                // Exit app
-            }
-        }
+    // Step-by-step back navigation according to Guidelines & user request
+    BackHandler(enabled = viewModel.canGoBack()) {
+        viewModel.popBack()
     }
 
     Scaffold(

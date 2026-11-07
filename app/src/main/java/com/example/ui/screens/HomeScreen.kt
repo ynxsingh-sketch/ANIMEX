@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,9 +36,12 @@ fun HomeScreen(
     projects: List<AnimeProject>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showNewProjectDialog by remember { mutableStateOf(false) }
     var newProjectTitle by remember { mutableStateOf("") }
     var selectedTemplateIndex by remember { mutableIntStateOf(0) }
+    var showPasteXmlDialog by remember { mutableStateOf(false) }
+    var pastedXmlInput by remember { mutableStateOf("") }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -140,11 +146,51 @@ fun HomeScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            // One-Tap Direct Action: PASTE & PREVIEW
+                            Button(
+                                onClick = {
+                                    val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clipText = clip.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                                    if (!clipText.isNullOrBlank() && (clipText.contains("<") || clipText.length > 20)) {
+                                        viewModel.importAndPreviewXml(clipText, "Imported Animation")
+                                    } else {
+                                        pastedXmlInput = clipText ?: ""
+                                        showPasteXmlDialog = true
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBlack),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("paste_xml_run_preview_hero_button")
+                            ) {
+                                Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("PASTE XML & RUN PREVIEW", fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             // Action quick pills
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        pastedXmlInput = ""
+                                        showPasteXmlDialog = true
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Code, contentDescription = null, tint = NeonPurple, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Custom XML", color = TextPrimary, fontSize = 12.sp)
+                                }
+
                                 FilledTonalButton(
                                     onClick = { viewModel.navigateTo(StudioScreen.ASSETS) },
                                     shape = RoundedCornerShape(12.dp),
@@ -168,9 +214,9 @@ fun HomeScreen(
                                     ),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("XML Spec", fontSize = 12.sp)
+                                    Text("Spec", fontSize = 12.sp)
                                 }
                             }
                         }
@@ -329,6 +375,86 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewProjectDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showPasteXmlDialog) {
+        AlertDialog(
+            onDismissRequest = { showPasteXmlDialog = false },
+            containerColor = SurfaceElevated,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Code, contentDescription = null, tint = NeonCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Paste Anime XML", fontWeight = FontWeight.Bold, color = TextPrimary)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Paste any custom anime animation XML code. The studio will parse it and generate the preview immediately.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clip.primaryClip?.getItemAt(0)?.text?.let { text ->
+                                    pastedXmlInput = text.toString()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Paste from Clipboard", color = NeonCyan, fontSize = 12.sp)
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = pastedXmlInput,
+                        onValueChange = { pastedXmlInput = it },
+                        placeholder = { Text("<anime>\n  <settings width=\"1920\" height=\"1080\" fps=\"30\" duration=\"10\"/>\n  <scene>...</scene>\n</anime>", color = TextMuted) },
+                        minLines = 6,
+                        maxLines = 10,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderDark,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("paste_xml_dialog_input")
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = pastedXmlInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            showPasteXmlDialog = false
+                            viewModel.importAndPreviewXml(trimmed, "Custom Animation")
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBlack),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_paste_xml_button")
+                ) {
+                    Text("Run Preview", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPasteXmlDialog = false }) {
                     Text("Cancel", color = TextSecondary)
                 }
             }

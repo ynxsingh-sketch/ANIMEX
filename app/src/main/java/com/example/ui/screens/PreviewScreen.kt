@@ -57,7 +57,7 @@ fun PreviewScreen(
                     title = currentProject?.title ?: doc?.title ?: "Anime Preview",
                     subtitle = doc?.let { "${it.settings.width}x${it.settings.height} • ${it.settings.fps} FPS" },
                     navigationIcon = Icons.Default.ArrowBack,
-                    onNavigationClick = { viewModel.navigateTo(StudioScreen.HOME) },
+                    onNavigationClick = { viewModel.popBack() },
                     actions = {
                         IconButton(
                             onClick = { viewModel.navigateTo(StudioScreen.EDITOR) },
